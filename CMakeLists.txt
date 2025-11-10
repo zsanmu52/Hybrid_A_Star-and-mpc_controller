@@ -6,24 +6,16 @@ message(STATUS "Author: Zhang Zhimeng")
 
 #set(CMAKE_VERBOSE_MAKEFILE "true")
 
-# Compiler
-include(CheckCXXCompilerFlag)
-CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+# Default to C++17
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
 
-if (COMPILER_SUPPORTS_CXX11)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-elseif (COMPILER_SUPPORTS_CXX0X)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
-else ()
-    message(FATAL_ERROR "The compiler ${CMAKE_CXX_FLAGS} doesn't have C++11 support.
-                         Please use a different C++ compiler")
-endif ()
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
 
-set(ADDITIONAL_CXX_FLAG "-Wall")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_CXX_FLAG}")
-
-set(CMAKE_CXX_FLAGS " -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 set(CMAKE_BUILD_TYPE "Release")
 
 # Eigen
@@ -34,26 +26,21 @@ include_directories(${EIGEN_INCLUDE_DIR})
 include(cmake/glog.cmake)
 include_directories(${GLOG_INCLUDE_DIRS})
 
-# catkin
-find_package(
-    catkin REQUIRED COMPONENTS
-    nav_msgs
-    roscpp
-    tf
-    sensor_msgs
-)
+# find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(OpenCV 4.7.0 REQUIRED EXACT)
+
 include_directories(
     include
-    ${catkin_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
-)
-
-catkin_package(
-    #  INCLUDE_DIRS include
-    #  LIBRARIES path_searcher
-    #  CATKIN_DEPENDS nav_mags roscpp tf
-    #  DEPENDS system_lib
 )
 
 add_library(
@@ -70,12 +57,54 @@ add_library(
     src/smoother.cpp
 )
 
+ament_target_dependencies(
+    PATH_SEARCHER_LIB
+    rclcpp
+    nav_msgs
+    geometry_msgs
+    sensor_msgs
+    visualization_msgs
+    tf2
+    tf2_ros
+    tf2_geometry_msgs
+)
+
 target_link_libraries(
     PATH_SEARCHER_LIB
-    ${catkin_LIBRARIES}
     ${GLOG_LIBRARIES}
     ${OpenCV_LIBS}
 )
 
 add_executable(hybrid_a_star_zm0612 app/hybrid_a_star_zm0612.cpp)
 target_link_libraries(hybrid_a_star_zm0612 PATH_SEARCHER_LIB)
+
+ament_target_dependencies(
+    hybrid_a_star_zm0612
+    rclcpp
+)
+
+install(TARGETS
+    PATH_SEARCHER_LIB
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
+install(TARGETS
+    hybrid_a_star_zm0612
+    DESTINATION lib/${PROJECT_NAME}
+)
+
+install(DIRECTORY
+    launch
+    maps
+    rviz
+    DESTINATION share/${PROJECT_NAME}
+)
+
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  ament_lint_auto_find_test_dependencies()
+endif()
+
+ament_package()

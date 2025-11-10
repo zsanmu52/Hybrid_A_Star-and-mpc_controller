@@ -27,16 +27,18 @@
 
 #include "hybrid_a_star/init_pose_subscriber.h"
 
-InitPoseSubscriber2D::InitPoseSubscriber2D(ros::NodeHandle &nh,
+InitPoseSubscriber2D::InitPoseSubscriber2D(rclcpp::Node::SharedPtr node,
                                            const std::string &topic_name,
                                            size_t buff_size) {
-    subscriber_ = nh.subscribe(
-            topic_name, buff_size, &InitPoseSubscriber2D::MessageCallBack, this
+    subscriber_ = node->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+        topic_name, 
+        buff_size, 
+        std::bind(&InitPoseSubscriber2D::MessageCallBack, this, std::placeholders::_1)
     );
 }
 
 void InitPoseSubscriber2D::MessageCallBack(
-        const geometry_msgs::PoseWithCovarianceStampedPtr &init_pose_ptr
+        const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr init_pose_ptr
 ) {
     buff_mutex_.lock();
     init_poses_.emplace_back(init_pose_ptr);
@@ -44,7 +46,7 @@ void InitPoseSubscriber2D::MessageCallBack(
 }
 
 void InitPoseSubscriber2D::ParseData(
-        std::deque<geometry_msgs::PoseWithCovarianceStampedPtr> &pose_data_buff
+        std::deque<geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr> &pose_data_buff
 ) {
     buff_mutex_.lock();
     if (!init_poses_.empty()) {

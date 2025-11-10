@@ -28,25 +28,25 @@
 #ifndef HYBRID_A_STAR_INIT_POSE_SUBSCRIBER_H
 #define HYBRID_A_STAR_INIT_POSE_SUBSCRIBER_H
 
-#include <ros/ros.h>
-#include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 
 #include <deque>
 #include <mutex>
 
 class InitPoseSubscriber2D {
 public:
-    InitPoseSubscriber2D(ros::NodeHandle &nh, const std::string &topic_name,
+    InitPoseSubscriber2D(rclcpp::Node::SharedPtr node, const std::string &topic_name,
                          size_t buff_size);
 
-    void ParseData(std::deque<geometry_msgs::PoseWithCovarianceStampedPtr> &pose_data_buff);
+    void ParseData(std::deque<geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr> &pose_data_buff);
 
 private:
-    void MessageCallBack(const geometry_msgs::PoseWithCovarianceStampedPtr &init_pose_ptr);
+    void MessageCallBack(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr init_pose_ptr);
 
 private:
-    ros::Subscriber subscriber_;
-    std::deque<geometry_msgs::PoseWithCovarianceStampedPtr> init_poses_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr subscriber_;
+    std::deque<geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr> init_poses_;
 
     std::mutex buff_mutex_;
 };
