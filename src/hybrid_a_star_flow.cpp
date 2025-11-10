@@ -112,9 +112,11 @@ HybridAStarFlow::HybridAStarFlow(rclcpp::Node::SharedPtr node) : node_(node) {
 
     smoother.initNh(node_);
     has_map_ = false;
+    timestamp_ = node_->now();
 }
 
 void HybridAStarFlow::Run() {
+    timestamp_ = node_->now();
     ReadData();
 
     if (!has_map_) {
