@@ -10,14 +10,18 @@ See [bilibili](https://www.bilibili.com/video/BV14y411a77H/?spm_id_from=333.999.
 
 ## 2. Prerequisites
 
-(1). **C++11 or C++0x Compiler**
+(1). **C++17 Compiler**
 
-(2). **ROS Melodic**: I'm developing on the melodic version. Using other versions of ROS 1, it should also work normally
+(2). **ROS2 Humble** (or later): This package has been migrated to ROS2
 
 ```shell
-sudo apt-get install ros-noetic-costmap-*
-sudo apt-get install ros-noetic-map-server
-sudo apt-get install ros-noetic-tf
+# Install ROS2 Humble (if not already installed)
+# Follow instructions at: https://docs.ros.org/en/humble/Installation.html
+
+# Install required ROS2 packages
+sudo apt-get install ros-humble-nav-msgs ros-humble-geometry-msgs ros-humble-sensor-msgs ros-humble-visualization-msgs
+sudo apt-get install ros-humble-tf2 ros-humble-tf2-ros ros-humble-tf2-geometry-msgs
+sudo apt-get install ros-humble-nav2-map-server
 ```
 
 (3). **Eigen 3**
@@ -46,37 +50,69 @@ sudo make install
 ## 3. Build 
 
 ```shell
-# new folder
-mkdir your_ws/src -p
-cd your_ws/src
+# Create ROS2 workspace
+mkdir -p ~/ros2_ws/src
+cd ~/ros2_ws/src
 
 # Clone the repository
-git clone https://github.com/qimao7213/Hybrid_A_Star-and-mpc_controller.git
-git clone https://github.com/qimao7213/MPC_car.git
+git clone https://github.com/zsanmu52/Hybrid_A_Star-and-mpc_controller.git
+
 # Build
-cd your_ws
-catkin_make
+cd ~/ros2_ws
+colcon build --packages-select hybrid_a_star_zm0612
+
+# Source the workspace
+source install/setup.bash
 ```
 
 ## 4. Run
 
 ```shell
-source devel/setup.bash
+# Source the workspace
+source ~/ros2_ws/install/setup.bash
 
 # Run Hybrid A Star
-roslaunch hybrid_a_star_zm0612 hybrid_a_star_zm0612.launch
+ros2 run hybrid_a_star_zm0612 hybrid_a_star_zm0612
 
-# Run mpc
-roslaunch mpc_car simulation.launch
+# In a separate terminal, you can publish the map and set start/goal poses
+# The starting point is selected by publishing to /initialpose topic
+# The goal point is selected by publishing to /goal_pose topic
 ```
 
-**The starting point is selected by the `2D Pose Estimate` in rviz, and the end point is selected by the `2D Nav Goal`.**
+**Note:** The launch file needs to be migrated to ROS2 format separately. For now, run the node directly and use RViz2 to visualize and interact.
+
+**The starting point is selected by the `2D Pose Estimate` in RViz2, and the end point is selected by the `2D Goal Pose`.**
 
 > I provide multiple maps, you just need to modify the variable image in `hybrid_a_star/maps/map.yaml` file. The map resolution can be changed.
 
 > If your start and end points are too close to obstacles, the collision detection mechanism may be triggered and no feasible paths will be searched and displayed
 
-> You can change the algorithm parameters at hybrid_a_star_zm0612.launch.
+> You can change the algorithm parameters by using ROS2 parameter system (ros2 param set).
+
+## 5. ROS2 Migration Notes
+
+This package has been migrated from ROS1 to ROS2. Key changes include:
+
+### API Changes:
+- `ros::NodeHandle` → `rclcpp::Node::SharedPtr`
+- `ros::Publisher` → `rclcpp::Publisher<MessageType>::SharedPtr`
+- `ros::Subscriber` → `rclcpp::Subscription<MessageType>::SharedPtr`
+- `ros::Time` → `rclcpp::Time`
+- `tf` → `tf2` with `tf2_geometry_msgs`
+- Message types: `geometry_msgs::PoseStamped` → `geometry_msgs::msg::PoseStamped`
+
+### Parameter System:
+- Parameters now use namespaced format: `planner.steering_angle` instead of `planner/steering_angle`
+- Parameters must be declared before use with `declare_parameter()`
+- Values retrieved with `get_parameter().as_<type>()`
+
+### Build System:
+- `catkin` → `ament_cmake`
+- `catkin_make` → `colcon build`
+- Package format updated from 2 to 3
+
+### Topic Changes:
+- Goal pose topic changed from `/move_base_simple/goal` to `/goal_pose` for ROS2 compatibility
 
 ## 6. Bug 报告和改进建议 | Bug Reports and Improvement Suggestions
 
