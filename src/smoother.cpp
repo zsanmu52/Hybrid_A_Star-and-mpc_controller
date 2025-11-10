@@ -6,35 +6,44 @@
  */
 #include "hybrid_a_star/smoother.h"
 #include <iostream>
-#include <tf/transform_datatypes.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 using namespace DVORONOI;
 using namespace SMOOTHER;
 
-ros::Publisher path_pub_;
+rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
+rclcpp::Node::SharedPtr smoother_node_;
 
-void Smoother::initNh(ros::NodeHandle &nh)
+void Smoother::initNh(rclcpp::Node::SharedPtr node)
 {
-  path_pub_ = nh.advertise<nav_msgs::Path>("smoothed_path_iteration", 1);
+  smoother_node_ = node;
+  path_pub_ = node->create_publisher<nav_msgs::msg::Path>("smoothed_path_iteration", 1);
+}
+
+geometry_msgs::msg::Quaternion createQuaternionMsgFromYawSmoother(double yaw) {
+    tf2::Quaternion q;
+    q.setRPY(0, 0, yaw);
+    return tf2::toMsg(q);
 }
 
 void PublishPathSmoothed(const VectorVec4d &spath) {
-    nav_msgs::Path nav_path;
+    nav_msgs::msg::Path nav_path;
 
-    geometry_msgs::PoseStamped pose_stamped;
+    geometry_msgs::msg::PoseStamped pose_stamped;
     for (const auto &pose: spath) {
         pose_stamped.header.frame_id = "world";
         pose_stamped.pose.position.x = pose.x();
         pose_stamped.pose.position.y = pose.y();
         pose_stamped.pose.position.z = 0.0;
-        pose_stamped.pose.orientation = tf::createQuaternionMsgFromYaw(pose.z());
+        pose_stamped.pose.orientation = createQuaternionMsgFromYawSmoother(pose.z());
 
         nav_path.poses.emplace_back(pose_stamped);
     }
     std::cout << "------发布了smoothed？-------" << std::endl;
     nav_path.header.frame_id = "world";
-    nav_path.header.stamp = ros::Time::now();
-    path_pub_.publish(nav_path);
+    nav_path.header.stamp = smoother_node_->now();
+    path_pub_->publish(nav_path);
 }
 
 

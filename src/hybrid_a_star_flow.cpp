@@ -27,11 +27,11 @@
 
 #include "hybrid_a_star/hybrid_a_star_flow.h"
 
-#include <nav_msgs/Path.h>
-#include <visualization_msgs/Marker.h>
-#include <visualization_msgs/MarkerArray.h>
-#include <tf/transform_datatypes.h>
-#include <tf/transform_broadcaster.h>
+#include <nav_msgs/msg/path.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 #include "hybrid_a_star/timer.h"
 
@@ -53,22 +53,42 @@ double Mod2Pi(const double &x) {
     return v;
 }
 
-HybridAStarFlow::HybridAStarFlow(ros::NodeHandle &nh) {
-    double steering_angle = nh.param("planner/steering_angle", 30);
-    int steering_angle_discrete_num = nh.param("planner/steering_angle_discrete_num", 2);
-    double wheel_base = nh.param("planner/wheel_base", 0.8);         //轴距，即前后轮的距离
-    double segment_length = nh.param("planner/segment_length", 1.0); //每一段采样的长度
-    int segment_length_discrete_num = nh.param("planner/segment_length_discrete_num", 8);
-    double steering_penalty = nh.param("planner/steering_penalty", 1.2);
-    double steering_change_penalty = nh.param("planner/steering_change_penalty", 1.5);
-    double reversing_penalty = nh.param("planner/reversing_penalty", 2.0);
-    double shot_distance = nh.param("planner/shot_distance", 15.0);
+geometry_msgs::msg::Quaternion createQuaternionMsgFromYaw(double yaw) {
+    tf2::Quaternion q;
+    q.setRPY(0, 0, yaw);
+    return tf2::toMsg(q);
+}
 
-    bool reverse_enable = nh.param("planner/reverse_enable", 0);
+HybridAStarFlow::HybridAStarFlow(rclcpp::Node::SharedPtr node) : node_(node) {
+    node_->declare_parameter("planner.steering_angle", 30);
+    node_->declare_parameter("planner.steering_angle_discrete_num", 2);
+    node_->declare_parameter("planner.wheel_base", 0.8);
+    node_->declare_parameter("planner.segment_length", 1.0);
+    node_->declare_parameter("planner.segment_length_discrete_num", 8);
+    node_->declare_parameter("planner.steering_penalty", 1.2);
+    node_->declare_parameter("planner.steering_change_penalty", 1.5);
+    node_->declare_parameter("planner.reversing_penalty", 2.0);
+    node_->declare_parameter("planner.shot_distance", 15.0);
+    node_->declare_parameter("planner.reverse_enable", false);
+    node_->declare_parameter("planner.vehicle_length", 2.0);
+    node_->declare_parameter("planner.vehicle_width", 1.0);
+    node_->declare_parameter("planner.vehicle_rear_dis", 0.5);
 
-    vehicle_length_ = nh.param("planner/vehicle_length", 2.0);
-    vehicle_width_ = nh.param("planner/vehicle_width", 1.0);
-    vehicle_rear_dis_ = nh.param("planner/vehicle_rear_dis", 0.5);
+    double steering_angle = node_->get_parameter("planner.steering_angle").as_int();
+    int steering_angle_discrete_num = node_->get_parameter("planner.steering_angle_discrete_num").as_int();
+    double wheel_base = node_->get_parameter("planner.wheel_base").as_double();         //轴距，即前后轮的距离
+    double segment_length = node_->get_parameter("planner.segment_length").as_double(); //每一段采样的长度
+    int segment_length_discrete_num = node_->get_parameter("planner.segment_length_discrete_num").as_int();
+    double steering_penalty = node_->get_parameter("planner.steering_penalty").as_double();
+    double steering_change_penalty = node_->get_parameter("planner.steering_change_penalty").as_double();
+    double reversing_penalty = node_->get_parameter("planner.reversing_penalty").as_double();
+    double shot_distance = node_->get_parameter("planner.shot_distance").as_double();
+
+    bool reverse_enable = node_->get_parameter("planner.reverse_enable").as_bool();
+
+    vehicle_length_ = node_->get_parameter("planner.vehicle_length").as_double();
+    vehicle_width_ = node_->get_parameter("planner.vehicle_width").as_double();
+    vehicle_rear_dis_ = node_->get_parameter("planner.vehicle_rear_dis").as_double();
     wheel_base_ = wheel_base;
     steering_angle_ = steering_angle;
 
@@ -76,25 +96,27 @@ HybridAStarFlow::HybridAStarFlow(ros::NodeHandle &nh) {
             steering_angle, steering_angle_discrete_num, segment_length, segment_length_discrete_num, wheel_base_,
             steering_penalty, reversing_penalty, steering_change_penalty, shot_distance, 72, reverse_enable
     );
-    costmap_sub_ptr_ = std::make_shared<CostMapSubscriber>(nh, "/map", 1);
-    init_pose_sub_ptr_ = std::make_shared<InitPoseSubscriber2D>(nh, "/initialpose", 1);
-    goal_pose_sub_ptr_ = std::make_shared<GoalPoseSubscriber2D>(nh, "/move_base_simple/goal", 1);
+    costmap_sub_ptr_ = std::make_shared<CostMapSubscriber>(node_, "/map", 1);
+    init_pose_sub_ptr_ = std::make_shared<InitPoseSubscriber2D>(node_, "/initialpose", 1);
+    goal_pose_sub_ptr_ = std::make_shared<GoalPoseSubscriber2D>(node_, "/goal_pose", 1);
 
-    path_pub_ = nh.advertise<nav_msgs::Path>("searched_path", 1);
-    spath_pub_ = nh.advertise<nav_msgs::Path>("searched_path_smoothed", 1);
-    spathWithDirection_pub_ = nh.advertise<nav_msgs::Path>("searched_path_smoothed_with_d", 1);
-    searched_tree_pub_ = nh.advertise<visualization_msgs::Marker>("searched_tree", 1);
-    vehicle_path_pub_ = nh.advertise<visualization_msgs::MarkerArray>("vehicle_path", 1);
-    goal_pose_pub_ = nh.advertise<geometry_msgs::PoseStamped>("goal_pose", 1);
-    start_pose_pub_ = nh.advertise<geometry_msgs::PoseStamped>("start_pose", 1);
-    path_forward_pub_ = nh.advertise<visualization_msgs::MarkerArray>("path_forward", 1);
-    path_backward_pub_ = nh.advertise<visualization_msgs::MarkerArray>("path_backward", 1);
+    path_pub_ = node_->create_publisher<nav_msgs::msg::Path>("searched_path", 1);
+    spath_pub_ = node_->create_publisher<nav_msgs::msg::Path>("searched_path_smoothed", 1);
+    spathWithDirection_pub_ = node_->create_publisher<nav_msgs::msg::Path>("searched_path_smoothed_with_d", 1);
+    searched_tree_pub_ = node_->create_publisher<visualization_msgs::msg::Marker>("searched_tree", 1);
+    vehicle_path_pub_ = node_->create_publisher<visualization_msgs::msg::MarkerArray>("vehicle_path", 1);
+    goal_pose_pub_ = node_->create_publisher<geometry_msgs::msg::PoseStamped>("goal_pose", 1);
+    start_pose_pub_ = node_->create_publisher<geometry_msgs::msg::PoseStamped>("start_pose", 1);
+    path_forward_pub_ = node_->create_publisher<visualization_msgs::msg::MarkerArray>("path_forward", 1);
+    path_backward_pub_ = node_->create_publisher<visualization_msgs::msg::MarkerArray>("path_backward", 1);
 
-    smoother.initNh(nh);
+    smoother.initNh(node_);
     has_map_ = false;
+    timestamp_ = node_->now();
 }
 
 void HybridAStarFlow::Run() {
+    timestamp_ = node_->now();
     ReadData();
 
     if (!has_map_) {
@@ -166,8 +188,25 @@ void HybridAStarFlow::Run() {
     while (HasStartPose() && HasGoalPose()) {
         InitPoseData();
 
-        double start_yaw = tf::getYaw(current_init_pose_ptr_->pose.pose.orientation);
-        double goal_yaw = tf::getYaw(current_goal_pose_ptr_->pose.orientation);
+        tf2::Quaternion start_quat(
+            current_init_pose_ptr_->pose.pose.orientation.x,
+            current_init_pose_ptr_->pose.pose.orientation.y,
+            current_init_pose_ptr_->pose.pose.orientation.z,
+            current_init_pose_ptr_->pose.pose.orientation.w
+        );
+        tf2::Matrix3x3 start_mat(start_quat);
+        double start_roll, start_pitch, start_yaw;
+        start_mat.getRPY(start_roll, start_pitch, start_yaw);
+        
+        tf2::Quaternion goal_quat(
+            current_goal_pose_ptr_->pose.orientation.x,
+            current_goal_pose_ptr_->pose.orientation.y,
+            current_goal_pose_ptr_->pose.orientation.z,
+            current_goal_pose_ptr_->pose.orientation.w
+        );
+        tf2::Matrix3x3 goal_mat(goal_quat);
+        double goal_roll, goal_pitch, goal_yaw;
+        goal_mat.getRPY(goal_roll, goal_pitch, goal_yaw);
         Vec3d start_state = Vec3d(
                 current_init_pose_ptr_->pose.pose.position.x,
                 current_init_pose_ptr_->pose.pose.position.y,
@@ -270,15 +309,15 @@ bool HybridAStarFlow::HasStartPose() {
 }
 
 void HybridAStarFlow::PublishPath(const VectorVec4d &path) {
-    nav_msgs::Path nav_path;
+    nav_msgs::msg::Path nav_path;
 
-    geometry_msgs::PoseStamped pose_stamped;
+    geometry_msgs::msg::PoseStamped pose_stamped;
     for (const auto &pose: path) {
         pose_stamped.header.frame_id = "world";
         pose_stamped.pose.position.x = pose.x();
         pose_stamped.pose.position.y = pose.y();
         pose_stamped.pose.position.z = 0.0;
-        pose_stamped.pose.orientation = tf::createQuaternionMsgFromYaw(pose.z());
+        pose_stamped.pose.orientation = createQuaternionMsgFromYaw(pose.z());
 
         nav_path.poses.emplace_back(pose_stamped);
     }
@@ -286,22 +325,22 @@ void HybridAStarFlow::PublishPath(const VectorVec4d &path) {
     nav_path.header.frame_id = "world";
     nav_path.header.stamp = timestamp_;
 
-    path_pub_.publish(nav_path);
+    path_pub_->publish(nav_path);
 
-    visualization_msgs::MarkerArray path_forward;
-    visualization_msgs::MarkerArray path_backward;
-    visualization_msgs::Marker path_point_delete;
-    path_point_delete.action = visualization_msgs::Marker::DELETEALL;
+    visualization_msgs::msg::MarkerArray path_forward;
+    visualization_msgs::msg::MarkerArray path_backward;
+    visualization_msgs::msg::Marker path_point_delete;
+    path_point_delete.action = visualization_msgs::msg::Marker::DELETEALL;
     path_forward.markers.emplace_back(path_point_delete);
     path_backward.markers.emplace_back(path_point_delete);
 
     for(unsigned int i = 0; i < path.size(); i += 1)
     {
-        visualization_msgs::Marker path_point;
+        visualization_msgs::msg::Marker path_point;
 
         path_point.header.frame_id = "world";
-        path_point.header.stamp = ros::Time::now();
-        path_point.type = visualization_msgs::Marker::SPHERE;
+        path_point.header.stamp = node_->now();
+        path_point.type = visualization_msgs::msg::Marker::SPHERE;
         path_point.id = i;
         path_point.scale.x = 0.1;
         path_point.scale.y = 0.1;
@@ -310,14 +349,14 @@ void HybridAStarFlow::PublishPath(const VectorVec4d &path) {
         path_point.pose.position.x = path[i].x();
         path_point.pose.position.y = path[i].y();
         path_point.pose.position.z = 0;
-        path_point.pose.orientation = tf::createQuaternionMsgFromYaw(path[i].z());
+        path_point.pose.orientation = createQuaternionMsgFromYaw(path[i].z());
 
         if(path[i](3) > 0.1) //前向
         {
             path_point.color.r = 0.0;
             path_point.color.b = 0.0;
             path_point.color.g = 1.0;
-            path_point.action = visualization_msgs::Marker::ADD;
+            path_point.action = visualization_msgs::msg::Marker::ADD;
             path_forward.markers.emplace_back(path_point);
         }
         else
@@ -325,23 +364,23 @@ void HybridAStarFlow::PublishPath(const VectorVec4d &path) {
             path_point.color.r = 1.0;
             path_point.color.b = 0.0;
             path_point.color.g = 0.0;
-            path_point.action = visualization_msgs::Marker::ADD;
+            path_point.action = visualization_msgs::msg::Marker::ADD;
             path_backward.markers.emplace_back(path_point);
         }   
     }
-    path_forward_pub_.publish(path_forward);
-    path_backward_pub_.publish(path_backward);
+    path_forward_pub_->publish(path_forward);
+    path_backward_pub_->publish(path_backward);
 }
 
 void HybridAStarFlow::PublishPathSmoothed(const VectorVec4d &spath) {
-    nav_msgs::Path nav_path, nav_pathWithDirection;
-    geometry_msgs::PoseStamped pose_stamped, pose_stampedWithDirection;
+    nav_msgs::msg::Path nav_path, nav_pathWithDirection;
+    geometry_msgs::msg::PoseStamped pose_stamped, pose_stampedWithDirection;
     for (const auto &pose: spath) {
         pose_stamped.header.frame_id = "world";
         pose_stamped.pose.position.x = pose.x();
         pose_stamped.pose.position.y = pose.y();
         pose_stamped.pose.position.z = 0.0;
-        pose_stamped.pose.orientation = tf::createQuaternionMsgFromYaw(pose.z());
+        pose_stamped.pose.orientation = createQuaternionMsgFromYaw(pose.z());
         nav_path.poses.emplace_back(pose_stamped);
 
         pose_stampedWithDirection = pose_stamped;
@@ -351,28 +390,28 @@ void HybridAStarFlow::PublishPathSmoothed(const VectorVec4d &spath) {
     // std::cout << "------发布了smoothed？-------" << std::endl;
     nav_path.header.frame_id = "world";
     nav_path.header.stamp = timestamp_;
-    spath_pub_.publish(nav_path);
+    spath_pub_->publish(nav_path);
 
     nav_pathWithDirection.header.frame_id = "world";
     nav_pathWithDirection.header.stamp = timestamp_;
-    spathWithDirection_pub_.publish(nav_pathWithDirection);
+    spathWithDirection_pub_->publish(nav_pathWithDirection);
 
 }
 
 void HybridAStarFlow::PublishVehiclePath(const VectorVec4d &path, double width,
                                          double length, unsigned int vehicle_interval = 5u) {
-    visualization_msgs::MarkerArray vehicle_array;
+    visualization_msgs::msg::MarkerArray vehicle_array;
 
     for (unsigned int i = 0; i < path.size(); i += vehicle_interval) {
-        visualization_msgs::Marker vehicle;
+        visualization_msgs::msg::Marker vehicle;
 
         if (i == 0) {
             vehicle.action = 3;
         }
 
         vehicle.header.frame_id = "world";
-        vehicle.header.stamp = ros::Time::now();
-        vehicle.type = visualization_msgs::Marker::CUBE;
+        vehicle.header.stamp = node_->now();
+        vehicle.type = visualization_msgs::msg::Marker::CUBE;
         vehicle.id = static_cast<int>(i / vehicle_interval);
         vehicle.scale.x = width;
         vehicle.scale.y = length;
@@ -387,19 +426,19 @@ void HybridAStarFlow::PublishVehiclePath(const VectorVec4d &path, double width,
         vehicle.pose.position.y = path[i].y();
         vehicle.pose.position.z = 0.0;
 
-        vehicle.pose.orientation = tf::createQuaternionMsgFromYaw(path[i].z());
+        vehicle.pose.orientation = createQuaternionMsgFromYaw(path[i].z());
         vehicle_array.markers.emplace_back(vehicle);
     }
 
-    vehicle_path_pub_.publish(vehicle_array);
+    vehicle_path_pub_->publish(vehicle_array);
 }
 
 void HybridAStarFlow::PublishSearchedTree(const VectorVec4d &searched_tree) {
-    visualization_msgs::Marker tree_list;
+    visualization_msgs::msg::Marker tree_list;
     tree_list.header.frame_id = "world";
-    tree_list.header.stamp = ros::Time::now();
-    tree_list.type = visualization_msgs::Marker::LINE_LIST;
-    tree_list.action = visualization_msgs::Marker::ADD;
+    tree_list.header.stamp = node_->now();
+    tree_list.type = visualization_msgs::msg::Marker::LINE_LIST;
+    tree_list.action = visualization_msgs::msg::Marker::ADD;
     tree_list.ns = "searched_tree";
     tree_list.scale.x = 0.02;
 
@@ -413,7 +452,7 @@ void HybridAStarFlow::PublishSearchedTree(const VectorVec4d &searched_tree) {
     tree_list.pose.orientation.y = 0.0;
     tree_list.pose.orientation.z = 0.0;
 
-    geometry_msgs::Point point;
+    geometry_msgs::msg::Point point;
     for (const auto &i: searched_tree) {
         point.x = i.x();
         point.y = i.y();
@@ -426,22 +465,42 @@ void HybridAStarFlow::PublishSearchedTree(const VectorVec4d &searched_tree) {
         tree_list.points.emplace_back(point);
     }
 
-    searched_tree_pub_.publish(tree_list);
+    searched_tree_pub_->publish(tree_list);
 }
 
 void HybridAStarFlow::PublishCurrentStartAndGoal()
 {
-    geometry_msgs::PoseStamped pose;
+    geometry_msgs::msg::PoseStamped pose;
     pose = *current_goal_pose_ptr_;
-    goal_pose_pub_.publish(pose);
+    goal_pose_pub_->publish(pose);
 
-    geometry_msgs::PoseStamped pose2;
+    geometry_msgs::msg::PoseStamped pose2;
     pose2.header = current_init_pose_ptr_->header;
     pose2.pose = current_init_pose_ptr_->pose.pose;
-    start_pose_pub_.publish(pose2);
+    start_pose_pub_->publish(pose2);
+
+    tf2::Quaternion start_q(
+        pose2.pose.orientation.x,
+        pose2.pose.orientation.y,
+        pose2.pose.orientation.z,
+        pose2.pose.orientation.w
+    );
+    tf2::Matrix3x3 start_m(start_q);
+    double start_roll, start_pitch, start_yaw;
+    start_m.getRPY(start_roll, start_pitch, start_yaw);
+
+    tf2::Quaternion goal_q(
+        pose.pose.orientation.x,
+        pose.pose.orientation.y,
+        pose.pose.orientation.z,
+        pose.pose.orientation.w
+    );
+    tf2::Matrix3x3 goal_m(goal_q);
+    double goal_roll, goal_pitch, goal_yaw;
+    goal_m.getRPY(goal_roll, goal_pitch, goal_yaw);
 
     std::cout << "The start is: " << pose2.pose.position.x << ", " << pose2.pose.position.y << ", " 
-              << tf::getYaw(pose2.pose.orientation) << std::endl;;
+              << start_yaw << std::endl;
     std::cout << "The goal is: " << pose.pose.position.x << ", " << pose.pose.position.y << ", " 
-              << tf::getYaw(pose.pose.orientation) << std::endl;;
+              << goal_yaw << std::endl;
 }

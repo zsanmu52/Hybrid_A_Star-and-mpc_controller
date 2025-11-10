@@ -35,13 +35,13 @@
 #include "hybrid_a_star/dynamicvoronoi.h"
 #include "hybrid_a_star/smoother.h"
 
-#include <ros/ros.h>
+#include <rclcpp/rclcpp.hpp>
 
 class HybridAStarFlow {
 public:
     HybridAStarFlow() = default;
 
-    explicit HybridAStarFlow(ros::NodeHandle &nh);
+    explicit HybridAStarFlow(rclcpp::Node::SharedPtr node);
 
     void Run();
 
@@ -63,35 +63,37 @@ private:
 
     void PublishCurrentStartAndGoal();
 private:
+    rclcpp::Node::SharedPtr node_;
+    
     std::shared_ptr<HybridAStar> kinodynamic_astar_searcher_ptr_;
     std::shared_ptr<CostMapSubscriber> costmap_sub_ptr_;
     std::shared_ptr<InitPoseSubscriber2D> init_pose_sub_ptr_;
     std::shared_ptr<GoalPoseSubscriber2D> goal_pose_sub_ptr_;
 
-    ros::Publisher path_pub_;
-    ros::Publisher spath_pub_;
-    ros::Publisher spathWithDirection_pub_;
-    ros::Publisher searched_tree_pub_;
-    ros::Publisher vehicle_path_pub_;
-    ros::Publisher goal_pose_pub_;
-    ros::Publisher start_pose_pub_;
-    ros::Publisher path_forward_pub_;
-    ros::Publisher path_backward_pub_;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr spath_pub_;
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr spathWithDirection_pub_;
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr searched_tree_pub_;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr vehicle_path_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_pose_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr start_pose_pub_;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr path_forward_pub_;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr path_backward_pub_;
 
 
     /// The voronoi diagram
     DVORONOI::DynamicVoronoi voronoiDiagram; //Voroni Diagram
     SMOOTHER::Smoother smoother;//路径平滑实体
 
-    std::deque<geometry_msgs::PoseWithCovarianceStampedPtr> init_pose_deque_;
-    std::deque<geometry_msgs::PoseStampedPtr> goal_pose_deque_;
-    std::deque<nav_msgs::OccupancyGridPtr> costmap_deque_;
+    std::deque<geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr> init_pose_deque_;
+    std::deque<geometry_msgs::msg::PoseStamped::SharedPtr> goal_pose_deque_;
+    std::deque<nav_msgs::msg::OccupancyGrid::SharedPtr> costmap_deque_;
 
-    geometry_msgs::PoseWithCovarianceStampedPtr current_init_pose_ptr_;
-    geometry_msgs::PoseStampedPtr current_goal_pose_ptr_;
-    nav_msgs::OccupancyGridPtr current_costmap_ptr_;
+    geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr current_init_pose_ptr_;
+    geometry_msgs::msg::PoseStamped::SharedPtr current_goal_pose_ptr_;
+    nav_msgs::msg::OccupancyGrid::SharedPtr current_costmap_ptr_;
 
-    ros::Time timestamp_;
+    rclcpp::Time timestamp_;
 
     bool has_map_{};
 };

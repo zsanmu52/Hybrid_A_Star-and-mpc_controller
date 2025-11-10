@@ -9,8 +9,8 @@
 
 #include <cmath>
 #include <vector>
-#include <nav_msgs/Path.h>
-#include <ros/ros.h>
+#include <nav_msgs/msg/path.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 #include "hybrid_a_star/dynamicvoronoi.h"
 #include "hybrid_a_star/state_node.h"
@@ -24,7 +24,7 @@ class Smoother {
  public:
   Smoother() {}
   void init(float kappaMax_, float obsDMax_, float vorObsDMax_);
-  void initNh(ros::NodeHandle &nh);
+  void initNh(rclcpp::Node::SharedPtr node);
   /*!
      \brief This function takes a path consisting of nodes and attempts to iteratively smooth the same using gradient descent.
      核心函数，将由节点组成的路径采用梯度下降方法进行平滑

@@ -29,27 +29,27 @@
 
 #include "3rd/backward.hpp"
 
-#include <ros/ros.h>
+#include <rclcpp/rclcpp.hpp>
 
 namespace backward {
 backward::SignalHandling sh;
 }
 
 int main(int argc, char **argv) {
-    ros::init(argc, argv, "run_hybrid_astar");
-    ros::NodeHandle node_handle("~");
+    rclcpp::init(argc, argv);
+    
+    auto node = std::make_shared<rclcpp::Node>("run_hybrid_astar");
+    HybridAStarFlow kinodynamic_astar_flow(node);
 
-    HybridAStarFlow kinodynamic_astar_flow(node_handle);
+    rclcpp::Rate rate(10);
 
-    ros::Rate rate(10);
-
-    while (ros::ok()) {
+    while (rclcpp::ok()) {
         kinodynamic_astar_flow.Run();
 
-        ros::spinOnce();
+        rclcpp::spin_some(node);
         rate.sleep();
     }
 
-    ros::shutdown();
+    rclcpp::shutdown();
     return 0;
 }

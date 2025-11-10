@@ -27,17 +27,21 @@
 
 #include "hybrid_a_star/costmap_subscriber.h"
 
-CostMapSubscriber::CostMapSubscriber(ros::NodeHandle &nh, const std::string &topic_name, size_t buff_size) {
-    subscriber_ = nh.subscribe(topic_name, buff_size, &CostMapSubscriber::MessageCallBack, this);
+CostMapSubscriber::CostMapSubscriber(rclcpp::Node::SharedPtr node, const std::string &topic_name, size_t buff_size) {
+    subscriber_ = node->create_subscription<nav_msgs::msg::OccupancyGrid>(
+        topic_name, 
+        buff_size, 
+        std::bind(&CostMapSubscriber::MessageCallBack, this, std::placeholders::_1)
+    );
 }
 
-void CostMapSubscriber::MessageCallBack(const nav_msgs::OccupancyGridPtr &costmap_msg_ptr) {
+void CostMapSubscriber::MessageCallBack(const nav_msgs::msg::OccupancyGrid::SharedPtr costmap_msg_ptr) {
     buff_mutex_.lock();
     deque_costmap_.emplace_back(costmap_msg_ptr);
     buff_mutex_.unlock();
 }
 
-void CostMapSubscriber::ParseData(std::deque<nav_msgs::OccupancyGridPtr> &deque_costmap_msg_ptr) {
+void CostMapSubscriber::ParseData(std::deque<nav_msgs::msg::OccupancyGrid::SharedPtr> &deque_costmap_msg_ptr) {
     buff_mutex_.lock();
     if (!deque_costmap_.empty()) {
         deque_costmap_msg_ptr.insert(deque_costmap_msg_ptr.end(),

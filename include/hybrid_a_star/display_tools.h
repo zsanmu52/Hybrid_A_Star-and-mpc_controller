@@ -30,21 +30,22 @@
 
 #include "type.h"
 
-#include <ros/ros.h>
-#include <nav_msgs/Path.h>
-#include <std_msgs/String.h>
-#include <visualization_msgs/Marker.h>
-#include <tf/transform_datatypes.h>
+#include <rclcpp/rclcpp.hpp>
+#include <nav_msgs/msg/path.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <visualization_msgs/msg/marker.hpp>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
-__attribute__((unused)) static void PublishSearchedTree(const TypeVectorVecd<4> &tree, const std::string &topic_name) {
-    static ros::NodeHandle node_handle("~");
-    static ros::Publisher tree_pub = node_handle.advertise<visualization_msgs::Marker>(topic_name, 10);
+__attribute__((unused)) static void PublishSearchedTree(const TypeVectorVecd<4> &tree, const std::string &topic_name, rclcpp::Node::SharedPtr node) {
+    static rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr tree_pub = 
+        node->create_publisher<visualization_msgs::msg::Marker>(topic_name, 10);
 
-    visualization_msgs::Marker tree_list;
+    visualization_msgs::msg::Marker tree_list;
     tree_list.header.frame_id = "world";
-    tree_list.header.stamp = ros::Time::now();
-    tree_list.type = visualization_msgs::Marker::LINE_LIST;
-    tree_list.action = visualization_msgs::Marker::ADD;
+    tree_list.header.stamp = node->now();
+    tree_list.type = visualization_msgs::msg::Marker::LINE_LIST;
+    tree_list.action = visualization_msgs::msg::Marker::ADD;
     tree_list.ns = "searched_tree";
     tree_list.scale.x = 0.02;
 
@@ -58,7 +59,7 @@ __attribute__((unused)) static void PublishSearchedTree(const TypeVectorVecd<4> 
     tree_list.pose.orientation.y = 0.0;
     tree_list.pose.orientation.z = 0.0;
 
-    geometry_msgs::Point point;
+    geometry_msgs::msg::Point point;
     for (const auto &i: tree) {
         point.x = i.x();
         point.y = i.y();
@@ -71,57 +72,63 @@ __attribute__((unused)) static void PublishSearchedTree(const TypeVectorVecd<4> 
         tree_list.points.emplace_back(point);
     }
 
-    tree_pub.publish(tree_list);
+    tree_pub->publish(tree_list);
 }
 
-__attribute__((unused)) static void PublishPath(ros::Publisher &path_pub, const TypeVectorVecd<3> &path) {
-    nav_msgs::Path nav_path;
+__attribute__((unused)) static geometry_msgs::msg::Quaternion createQuaternionMsgFromRPY(double roll, double pitch, double yaw) {
+    tf2::Quaternion q;
+    q.setRPY(roll, pitch, yaw);
+    return tf2::toMsg(q);
+}
 
-    geometry_msgs::PoseStamped pose_stamped;
+__attribute__((unused)) static void PublishPath(rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr &path_pub, const TypeVectorVecd<3> &path, rclcpp::Node::SharedPtr node) {
+    nav_msgs::msg::Path nav_path;
+
+    geometry_msgs::msg::PoseStamped pose_stamped;
     for (const auto &pose: path) {
         pose_stamped.header.frame_id = "world";
         pose_stamped.pose.position.x = pose.x();
         pose_stamped.pose.position.y = pose.y();
         pose_stamped.pose.position.z = 0.0;
-        pose_stamped.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(0, 0, pose.z());
+        pose_stamped.pose.orientation = createQuaternionMsgFromRPY(0, 0, pose.z());
         nav_path.poses.emplace_back(pose_stamped);
     }
 
     nav_path.header.frame_id = "world";
-    nav_path.header.stamp = ros::Time::now();
+    nav_path.header.stamp = node->now();
 
-    path_pub.publish(nav_path);
+    path_pub->publish(nav_path);
 }
 
-__attribute__((unused)) static void PublishPath(const TypeVectorVecd<3> &path, const std::string &topic_name) {
-    static ros::NodeHandle node_handle("~");
-    static ros::Publisher path_pub = node_handle.advertise<nav_msgs::Path>(topic_name, 1);
+__attribute__((unused)) static void PublishPath(const TypeVectorVecd<3> &path, const std::string &topic_name, rclcpp::Node::SharedPtr node) {
+    static rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub = 
+        node->create_publisher<nav_msgs::msg::Path>(topic_name, 1);
 
-    nav_msgs::Path nav_path;
+    nav_msgs::msg::Path nav_path;
 
-    geometry_msgs::PoseStamped pose_stamped;
+    geometry_msgs::msg::PoseStamped pose_stamped;
     for (const auto &pose: path) {
         pose_stamped.header.frame_id = "world";
         pose_stamped.pose.position.x = pose.x();
         pose_stamped.pose.position.y = pose.y();
         pose_stamped.pose.position.z = 0.0;
-        pose_stamped.pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(0, 0, pose.z());
+        pose_stamped.pose.orientation = createQuaternionMsgFromRPY(0, 0, pose.z());
         nav_path.poses.emplace_back(pose_stamped);
     }
 
     nav_path.header.frame_id = "world";
-    nav_path.header.stamp = ros::Time::now();
+    nav_path.header.stamp = node->now();
 
-    path_pub.publish(nav_path);
+    path_pub->publish(nav_path);
 }
 
-__attribute__((unused)) static void PublishPath(const TypeVectorVecd<2> &path, const std::string &topic_name) {
-    static ros::NodeHandle node_handle("~");
-    static ros::Publisher path_pub = node_handle.advertise<nav_msgs::Path>(topic_name, 10);
+__attribute__((unused)) static void PublishPath(const TypeVectorVecd<2> &path, const std::string &topic_name, rclcpp::Node::SharedPtr node) {
+    static rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub = 
+        node->create_publisher<nav_msgs::msg::Path>(topic_name, 10);
 
-    nav_msgs::Path nav_path;
+    nav_msgs::msg::Path nav_path;
 
-    geometry_msgs::PoseStamped pose_stamped;
+    geometry_msgs::msg::PoseStamped pose_stamped;
     for (const auto &pose: path) {
         pose_stamped.header.frame_id = "world";
         pose_stamped.pose.position.x = pose.x();
@@ -132,13 +139,13 @@ __attribute__((unused)) static void PublishPath(const TypeVectorVecd<2> &path, c
     }
 
     nav_path.header.frame_id = "world";
-    nav_path.header.stamp = ros::Time::now();
+    nav_path.header.stamp = node->now();
 
-    path_pub.publish(nav_path);
+    path_pub->publish(nav_path);
 }
 
 __attribute__((unused)) static void PublishEllipse(const Vec2d &x_center, double &c_best, double dist,
-                                                   double theta, const std::string &topic_name) {
+                                                   double theta, const std::string &topic_name, rclcpp::Node::SharedPtr node) {
     double a = std::sqrt(c_best * c_best - dist * dist) * 0.5;
     double b = c_best * 0.5;
     double angle = M_PI / 2 - theta;
@@ -158,12 +165,12 @@ __attribute__((unused)) static void PublishEllipse(const Vec2d &x_center, double
         t += 0.1;
     }
 
-    static ros::NodeHandle node_handle("~");
-    static ros::Publisher path_pub = node_handle.advertise<nav_msgs::Path>(topic_name, 10);
+    static rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub = 
+        node->create_publisher<nav_msgs::msg::Path>(topic_name, 10);
 
-    nav_msgs::Path nav_path;
+    nav_msgs::msg::Path nav_path;
 
-    geometry_msgs::PoseStamped pose_stamped;
+    geometry_msgs::msg::PoseStamped pose_stamped;
     for (const auto &pose: ellipse_path) {
         pose_stamped.header.frame_id = "world";
         pose_stamped.pose.position.x = pose.x();
@@ -174,9 +181,9 @@ __attribute__((unused)) static void PublishEllipse(const Vec2d &x_center, double
     }
 
     nav_path.header.frame_id = "world";
-    nav_path.header.stamp = ros::Time::now();
+    nav_path.header.stamp = node->now();
 
-    path_pub.publish(nav_path);
+    path_pub->publish(nav_path);
 }
 
 #endif //HYBRID_A_STAR_DISPLAY_TOOLS_H
